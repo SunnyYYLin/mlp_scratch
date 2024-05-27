@@ -11,12 +11,12 @@ class TwoLayerNet(object):
     A two-layer fully-connected neural network. The net has an input dimension of
     N, a hidden layer dimension of H, and performs classification over C classes.
     We train the network with a softmax loss function and L2 regularization on the
-    weight matrices. The network uses a ReLU nonlinearity after the first fully
+    weight matrices. The network uses a Tanh nonlinearity after the first fully
     connected layer.
 
     In other words, the network has the following architecture:
 
-    input - fully connected layer - ReLU - fully connected layer - softmax
+    input - fully connected layer - Tanh - fully connected layer - softmax
 
     The outputs of the second fully-connected layer are the scores for each class.
     """
@@ -90,7 +90,7 @@ class TwoLayerNet(object):
         # print(f'W2 shape: {W2.shape}')
         
         # Forward pass
-        h = np.concatenate((np.maximum(0, X @ W1), np.ones((N, 1))), axis=1)
+        h = np.concatenate((np.tanh(X @ W1), np.ones((N, 1))), axis=1)
         # print(f'h shape: {h.shape}')
         scores = h @ W2
         # print(f'scores shape: {scores.shape}')
@@ -130,11 +130,11 @@ class TwoLayerNet(object):
         # grads['W1'] should store the gradient on W1, and be a matrix of same size         #
         #                                                                                   #
         # Additional Requirement: Implement Sigmoid activation and its derivative           #
-        # computation code below to substitute the code for ReLU below                      #
+        # computation code below to substitute the code for Tanh below                      #
         #####################################################################################
         # *****START OF YOUR CODE*****
 
-        # Gradient calculation for ReLU activation has been implemented for you below. Try implmenting other activation functions and corresponding gradient
+        # Gradient calculation for Tanh activation has been implemented for you below. Try implmenting other activation functions and corresponding gradient
         # calculation if you would like to explore further.
         c = W2.shape[1]
         dsoft = scores / np.expand_dims(np.sum(scores, axis=1), axis=1)
@@ -146,8 +146,8 @@ class TwoLayerNet(object):
         # print(f'b2_grad shape: {dW2[-1, :].shape}')
         grads['W2'] = np.delete(dW2, -1, axis=0) + 2 * reg * np.delete(W2, -1, axis=0)
         dh = dsoft.dot(np.delete(W2, -1, axis=0).T)
-        # ReLu derivate
-        dh = dh*(np.delete(h, -1, axis=1) != 0)
+        # Tanh derivate
+        dh *= 1 - h[:, :-1] ** 2
         dW1 = X.T.dot(dh)/N
         grads['b1'] = dW1[-1, :]
         grads['W1'] = np.delete(dW1, -1, axis=0) + 2 * reg * np.delete(W1, -1, axis=0)
@@ -261,7 +261,7 @@ class TwoLayerNet(object):
         # *****START OF YOUR CODE*****
 
         z1 = np.dot(X, self.params['W1']) + self.params['b1']
-        a1 = np.maximum(0, z1)
+        a1 = np.tanh(z1)
         scores = np.dot(a1, self.params['W2']) + self.params['b2']
         y_pred = np.argmax(scores, axis=1)
 
