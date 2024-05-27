@@ -21,7 +21,7 @@ class TwoLayerNet(object):
     The outputs of the second fully-connected layer are the scores for each class.
     """
 
-    def __init__(self, input_size, hidden_size, output_size, std=1e-4):
+    def __init__(self, input_size, hidden_size, output_size, std=1e-4, dropout=0.5):
         """
         Initialize the model. Weights are initialized to small random values and
         biases are initialized to zero. Weights and biases are stored in the
@@ -42,6 +42,7 @@ class TwoLayerNet(object):
         self.params['b1'] = np.zeros(hidden_size)
         self.params['W2'] = std * np.random.randn(hidden_size, output_size)
         self.params['b2'] = np.zeros(output_size)
+        self.dropout = dropout
 
     def loss(self, X, y=None, reg=0.0):
         """
@@ -90,7 +91,16 @@ class TwoLayerNet(object):
         # print(f'W2 shape: {W2.shape}')
         
         # Forward pass
-        h = np.concatenate((np.maximum(0, X @ W1), np.ones((N, 1))), axis=1)
+        z1 = np.maximum(0, X @ W1)
+        
+        # Dropout
+        if self.dropout > 0:
+            mask = (np.random.rand(*z1.shape) < (1 - self.dropout))
+            z1 *= mask / (1 - self.dropout)
+        else:
+            mask = None
+            
+        h = np.concatenate((z1, np.ones((N, 1))), axis=1)
         # print(f'h shape: {h.shape}')
         scores = h @ W2
         # print(f'scores shape: {scores.shape}')
@@ -148,6 +158,11 @@ class TwoLayerNet(object):
         dh = dsoft.dot(np.delete(W2, -1, axis=0).T)
         # ReLu derivate
         dh = dh*(np.delete(h, -1, axis=1) != 0)
+        
+        # Applying dropout
+        if self.dropout > 0:
+            dh *= mask / (1 - self.dropout)
+        
         dW1 = X.T.dot(dh)/N
         grads['b1'] = dW1[-1, :]
         grads['W1'] = np.delete(dW1, -1, axis=0) + 2 * reg * np.delete(W1, -1, axis=0)
