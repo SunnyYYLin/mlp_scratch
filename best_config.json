@@ -1,0 +1,1 @@
+{"iter_num": 3000, "hidden_size": 75, "learning_rate": 0.003, "lr_decay": 0.8, "reg": 0.003, "val_acc": 0.547}
