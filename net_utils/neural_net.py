@@ -1,270 +1,131 @@
-from __future__ import print_function
-
-from builtins import range
-from builtins import object
-import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+import tqdm
 
-class TwoLayerNet(object):
-    """
-    A two-layer fully-connected neural network. The net has an input dimension of
-    N, a hidden layer dimension of H, and performs classification over C classes.
-    We train the network with a softmax loss function and L2 regularization on the
-    weight matrices. The network uses a ReLU nonlinearity after the first fully
-    connected layer.
-
-    In other words, the network has the following architecture:
-
-    input - fully connected layer - ReLU - fully connected layer - softmax
-
-    The outputs of the second fully-connected layer are the scores for each class.
-    """
-
-    def __init__(self, input_size, hidden_size, output_size, std=1e-4):
-        """
-        Initialize the model. Weights are initialized to small random values and
-        biases are initialized to zero. Weights and biases are stored in the
-        variable self.params, which is a dictionary with the following keys:
-
-        W1: First layer weights; has shape (D, H)
-        b1: First layer biases; has shape (H,)
-        W2: Second layer weights; has shape (H, C)
-        b2: Second layer biases; has shape (C,)
-
-        Inputs:
-        - input_size: The dimension D of the input data.
-        - hidden_size: The number of neurons H in the hidden layer.
-        - output_size: The number of classes C.
-        """
-        self.params = {}
-        self.params['W1'] = std * np.random.randn(input_size, hidden_size)
-        self.params['b1'] = np.zeros(hidden_size)
-        self.params['W2'] = std * np.random.randn(hidden_size, output_size)
-        self.params['b2'] = np.zeros(output_size)
-
-    def loss(self, X, y=None, reg=0.0):
-        """
-        Compute the loss and gradients for a two layer fully connected neural
-        network.
-
-        Inputs:
-        - X: Input data of shape (N, D). Each X[i] is a training sample.
-        - y: Vector of training labels. y[i] is the label for X[i], and each y[i] is
-          an integer in the range 0 <= y[i] < C. This parameter is optional; if it
-          is not passed then we only return scores, and if it is passed then we
-          instead return the loss and gradients.
-        - reg: Regularization strength.
-
-        Returns:
-        If y is None, return a matrix scores of shape (N, C) where scores[i, c] is
-        the score for class c on input X[i].
-
-        If y is not None, instead return a tuple of:
-        - loss: Loss (data loss and regularization loss) for this batch of training
-          samples.
-        - grads: Dictionary mapping parameter names to gradients of those parameters
-          with respect to the loss function; has the same keys as self.params.
-        """
-        # Unpack variables from the params dictionary
-        W1, b1 = self.params['W1'], self.params['b1']
-        W2, b2 = self.params['W2'], self.params['b2']
-        N, D = X.shape
-
-
-        # Compute the forward pass
-        scores = None
-        #############################################################################
-        # TODO: Perform the forward pass, computing the class scores for the input. #
-        # Store the result in the scores variable, which should be an array of      #
-        # shape (N, C).                                                             #
-        #############################################################################
-        # *****START OF YOUR CODE*****
-
-        # Reshape W and X
-        W1 = np.concatenate((W1, b1.reshape(1, -1)), axis=0)
-        W2 = np.concatenate((W2, b2.reshape(1, -1)), axis=0)
-        X = np.concatenate((X, np.ones((N, 1))), axis=1)
-        # print(f'X shape: {X.shape}')
-        # print(f'W1 shape: {W1.shape}')
-        # print(f'W2 shape: {W2.shape}')
+class TwoLayerNet(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes, std=1e-4):
+        super(TwoLayerNet, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.fc1 = nn.Linear(input_size, hidden_size).to(self.device)
+        self.fc2 = nn.Linear(hidden_size, num_classes).to(self.device)
+        nn.init.normal_(self.fc1.weight, std=std)
+        nn.init.normal_(self.fc2.weight, std=std)
+        nn.init.zeros_(self.fc1.bias)
+        nn.init.zeros_(self.fc2.bias)
         
-        # Forward pass
-        h = np.concatenate((np.maximum(0, X @ W1), np.ones((N, 1))), axis=1)
-        # print(f'h shape: {h.shape}')
-        scores = h @ W2
-        # print(f'scores shape: {scores.shape}')
-
-        # *****END OF YOUR CODE*****
-
-        # If the targets are not given then jump out, we're done
+    def forward(self, x):
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        return x
+    
+    def predict(self, X):
+        X = X.to(self.device)
+        return torch.argmax(self.forward(X), dim=1)
+      
+    def loss(self, X, y=None, reg=0.0):
+        X = X.to(self.device)
+        loss = None
+        N = X.size(0)
+        scores = self.forward(X)
         if y is None:
             return scores
-
-        # Compute the loss
-        loss = None
-        #############################################################################
-        # TODO: Finish the forward pass, and compute the loss. This should include  #
-        # both the data loss and L2 regularization for W1 and W2. Store the result  #
-        # in the variable loss, which should be a scalar. Use the Softmax           #
-        # classifier loss.                                                        #
-        #############################################################################
-        # *****START OF YOUR CODE*****
-
-        scores -= np.max(scores, axis=1, keepdims=True)
-        scores = np.exp(scores)
-        scores = scores / np.sum(scores, axis=1, keepdims=True)
-        logprobs = -np.log(scores[np.arange(N), y])
-        data_loss = np.sum(logprobs) / N
-        reg_loss = reg * (np.sum(np.delete(W1, -1, axis=0) ** 2) + np.sum(np.delete(W2, -1, axis=0) ** 2))  # Regularization only on weights
-        loss = data_loss + reg_loss
-
-        # *****END OF YOUR CODE*****
-
-        # Backward pass: compute gradients
+        
+        y = y.to(self.device)
         grads = {}
-
-        #####################################################################################
-        # TODO: (Bonus)(附加题) Compute the backward pass, computing the derivatives of the weights #
-        # and biases. Store the results in the grads dictionary. For example,               #
-        # grads['W1'] should store the gradient on W1, and be a matrix of same size         #
-        #                                                                                   #
-        # Additional Requirement: Implement Sigmoid activation and its derivative           #
-        # computation code below to substitute the code for ReLU below                      #
-        #####################################################################################
-        # *****START OF YOUR CODE*****
-
-        # Gradient calculation for ReLU activation has been implemented for you below. Try implmenting other activation functions and corresponding gradient
-        # calculation if you would like to explore further.
-        c = W2.shape[1]
-        dsoft = scores / np.expand_dims(np.sum(scores, axis=1), axis=1)
-        dsoft[np.arange(N), y] -= 1
-        # print(f'dsoft shape: {dsoft.shape}')
-        dW2 = h.T.dot(dsoft)/N # Hint: 'h' is the output of the first layer
-        # print(f'dW2 shape: {dW2.shape}')
-        grads['b2'] = dW2[-1,:]
-        # print(f'b2_grad shape: {dW2[-1, :].shape}')
-        grads['W2'] = np.delete(dW2, -1, axis=0) + 2 * reg * np.delete(W2, -1, axis=0)
-        dh = dsoft.dot(np.delete(W2, -1, axis=0).T)
-        # ReLu derivate
-        dh = dh*(np.delete(h, -1, axis=1) != 0)
-        dW1 = X.T.dot(dh)/N
-        grads['b1'] = dW1[-1, :]
-        grads['W1'] = np.delete(dW1, -1, axis=0) + 2 * reg * np.delete(W1, -1, axis=0)
-
-        # *****END OF YOUR CODE*****
-
+        
+        loss = F.cross_entropy(scores, y)
+        loss += reg * (torch.sum(self.fc1.weight ** 2) + torch.sum(self.fc2.weight ** 2))
+        loss.backward()
+        for name, param in self.named_parameters():
+            grads[name] = param.grad
+        
         return loss, grads
-
-    def train(self, X, y, X_val, y_val,
-              learning_rate=1e-3, learning_rate_decay=0.95,
-              reg=5e-6, num_iters=100,
-              batch_size=200, verbose=False, tqdm_verbose=False):
-        """
-        Train this neural network using stochastic gradient descent.
-
-        Inputs:
-        - X: A numpy array of shape (N, D) giving training data.
-        - y: A numpy array f shape (N,) giving training labels; y[i] = c means that
-          X[i] has label c, where 0 <= c < C.
-        - X_val: A numpy array of shape (N_val, D) giving validation data.
-        - y_val: A numpy array of shape (N_val,) giving validation labels.
-        - learning_rate: Scalar giving learning rate for optimization.
-        - learning_rate_decay: Scalar giving factor used to decay the learning rate
-          after each epoch.
-        - reg: Scalar giving regularization strength.
-        - num_iters: Number of steps to take when optimizing.
-        - batch_size: Number of training examples to use per step.
-        - verbose: boolean; if true print progress during optimization.
-        """
-        num_train = X.shape[0]
-        iterations_per_epoch = max(num_train / batch_size, 1)
-
-        # Use SGD to optimize the parameters in self.model
+    
+    def train(self, X, y, X_val, y_val, learning_rate=1e-3, learning_rate_decay=0.95,
+              reg=5e-6, num_iters=1000, batch_size=200, verbose=False, iters_per_epoch = 100):
+        # Convert numpy arrays to torch tensors
+        X, y = X.to(self.device), y.to(self.device)
+        X_val, y_val = X_val.to(self.device), y_val.to(self.device)
+        train_dataset = TensorDataset(X, y)
+        val_dataset = TensorDataset(X_val, y_val)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        train_iter = iter(train_loader)
+        
+        optimizer = optim.SGD(self.parameters(), lr=learning_rate)
+        lr_scheduler = optim.lr_scheduler.ExponentialLR(optimizer, learning_rate_decay, verbose=verbose)
         loss_history = []
         train_acc_history = []
         val_acc_history = []
 
-        for it in tqdm(range(num_iters), disable=not tqdm_verbose):
-            X_batch = None
-            y_batch = None
-
-            #########################################################################
-            # TODO: Create a random minibatch of training data and labels, storing  #
-            # them in X_batch and y_batch respectively.                             #
-            #########################################################################
-            # *****START OF YOUR CODE*****
-
-            mask = np.random.choice(num_train, batch_size)
-            X_batch = X[mask]
-            y_batch = y[mask]
-
-            # *****END OF YOUR CODE*****
-
+        for it in tqdm.tqdm(range(num_iters)):
+            try:
+                X_batch, y_batch = next(train_iter)
+            except StopIteration:
+                # train_iter = iter(train_loader)
+                pass
+            
             # Compute loss and gradients using the current minibatch
-            loss, grads = self.loss(X=X_batch, y=y_batch, reg=reg)
-            loss_history.append(loss)
-
-            #########################################################################
-            # TODO: Use the gradients in the grads dictionary to update the         #
-            # parameters of the network (stored in the dictionary self.params)      #
-            # using stochastic gradient descent. You'll need to use the gradients   #
-            # stored in the grads dictionary defined above.                         #
-            #########################################################################
-            # *****START OF YOUR CODE*****
-
-            for param in self.params:
-                self.params[param] -= learning_rate * grads[param]
-
-            # *****END OF YOUR CODE*****
-
-            if verbose and it % 100 == 0:
-                print('iteration %d / %d: loss %f' % (it, num_iters, loss))
-
-            # Every epoch, check train and val accuracy and decay learning rate.
-            if it % iterations_per_epoch == 0:
-                # Check accuracy
-                train_acc = (self.predict(X_batch) == y_batch).mean()
-                val_acc = (self.predict(X_val) == y_val).mean()
-                train_acc_history.append(train_acc)
-                val_acc_history.append(val_acc)
-
-                # Decay learning rate
-                learning_rate *= learning_rate_decay
+            optimizer.zero_grad()
+            loss = self.loss(X_batch, y_batch, reg)
+            optimizer.step()
+            loss_history.append(loss[0].item())
+            if verbose and it % iters_per_epoch == 0:
+                # print(f'Iteration {it}/{num_iters}, loss = {loss[0].item()}')
+                train_iter = iter(train_loader)
+                lr_scheduler.step()
+                train_acc_history.append(self.check_accuracy(train_loader))
+                val_acc_history.append(self.check_accuracy(val_loader))
 
         return {
-          'loss_history': loss_history,
-          'train_acc_history': train_acc_history,
-          'val_acc_history': val_acc_history,
+            'loss_history': loss_history,
+            'train_acc_history': train_acc_history,
+            'val_acc_history': val_acc_history,
         }
+        
+    def check_accuracy(self, loader):
+        num_correct = 0
+        num_samples = 0
+        with torch.no_grad():
+            for x, y in loader:
+                scores = self.forward(x)
+                _, preds = scores.max(1)
+                num_correct += (preds == y).sum()
+                num_samples += preds.size(0)
+        return float(num_correct) / num_samples
+        
+if __name__ == "__main__":
+    input_size = 4
+    hidden_size = 10
+    num_classes = 3
+    num_inputs = 5
 
-    def predict(self, X):
-        """
-        Use the trained weights of this two-layer network to predict labels for
-        data points. For each data point we predict scores for each of the C
-        classes, and assign each data point to the class with the highest score.
+    def init_toy_model():
+        torch.random.manual_seed(0)
+        return TwoLayerNet(input_size, hidden_size, num_classes, std=1e-1)
 
-        Inputs:
-        - X: A numpy array of shape (N, D) giving N D-dimensional data points to
-          classify.
+    def init_toy_data():
+        torch.random.manual_seed(1)
+        X = 10 * torch.randn(num_inputs, input_size)
+        y = torch.tensor([0, 1, 2, 2, 1])
+        return X, y
 
-        Returns:
-        - y_pred: A numpy array of shape (N,) giving predicted labels for each of
-          the elements of X. For all i, y_pred[i] = c means that X[i] is predicted
-          to have class c, where 0 <= c < C.
-        """
-        y_pred = None
+    net = init_toy_model()
+    X, y = init_toy_data()
+    stats = net.train(X, y, X, y,
+            learning_rate=1e-1, reg=5e-6,
+            num_iters=100, verbose=True)
 
-        ###########################################################################
-        # TODO: Implement this function; it should be VERY simple!                #
-        ###########################################################################
-        # *****START OF YOUR CODE*****
+    print('Final training loss: ', stats['loss_history'][-1])
 
-        z1 = np.dot(X, self.params['W1']) + self.params['b1']
-        a1 = np.maximum(0, z1)
-        scores = np.dot(a1, self.params['W2']) + self.params['b2']
-        y_pred = np.argmax(scores, axis=1)
-
-        # *****END OF YOUR CODE*****
-
-        return y_pred
+    # plot the loss history
+    plt.plot(stats['loss_history'])
+    plt.xlabel('iteration')
+    plt.ylabel('training loss')
+    plt.title('Training Loss history')
+    plt.show()
