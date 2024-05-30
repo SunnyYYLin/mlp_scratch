@@ -5,6 +5,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import matplotlib.pyplot as plt
 import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
 class TwoLayerNet(nn.Module):
     def __init__(self, input_size, hidden_size, num_classes, std=1e-4):
@@ -47,7 +48,7 @@ class TwoLayerNet(nn.Module):
         return loss, grads
     
     def train(self, X, y, X_val, y_val, learning_rate=1e-3, learning_rate_decay=0.95,
-              reg=5e-6, num_iters=1000, batch_size=200, verbose=False, iters_per_epoch = 100):
+              reg=5e-6, num_iters=1000, batch_size=200, verbose=False, iters_per_epoch = 100, tqdm_verbose=False):
         # Convert numpy arrays to torch tensors
         X, y = X.to(self.device), y.to(self.device)
         X_val, y_val = X_val.to(self.device), y_val.to(self.device)
@@ -62,8 +63,9 @@ class TwoLayerNet(nn.Module):
         loss_history = []
         train_acc_history = []
         val_acc_history = []
+        writer = SummaryWriter()
 
-        for it in tqdm.tqdm(range(num_iters)):
+        for it in tqdm.tqdm(range(num_iters), disable=not tqdm_verbose):
             try:
                 X_batch, y_batch = next(train_iter)
             except StopIteration:
@@ -75,12 +77,15 @@ class TwoLayerNet(nn.Module):
             loss = self.loss(X_batch, y_batch, reg)
             optimizer.step()
             loss_history.append(loss[0].item())
+            writer.add_scalar('Loss/train', loss[0].item(), it)
             if verbose and it % iters_per_epoch == 0:
                 # print(f'Iteration {it}/{num_iters}, loss = {loss[0].item()}')
                 train_iter = iter(train_loader)
                 lr_scheduler.step()
                 train_acc_history.append(self.check_accuracy(train_loader))
                 val_acc_history.append(self.check_accuracy(val_loader))
+                writer.add_scalar('Accuracy/train', train_acc_history[-1], it)
+                writer.add_scalar('Accuracy/val', val_acc_history[-1], it)
 
         return {
             'loss_history': loss_history,
